@@ -1,0 +1,115 @@
+---
+title: "Untitled"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r Setup, include=FALSE, results='hide', warning=FALSE}
+library(knitr)
+opts_chunk$set(fig.path="figures/",
+               cache.path="cache/",
+               cache=FALSE,
+               echo=TRUE,
+               message=FALSE,
+               warning=FALSE)  
+``` 
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+all_complaints = read.csv("E:/complaints.csv")
+```
+
+```{r}
+#omit NA values
+all_complaints[all_complaints == ''] = NA
+all_complaints = na.omit(all_complaints)
+```
+
+```{r}
+#omit data in the wrong column and get a subset
+complaints = subset(all_complaints, grepl(glob2rx("20**-**-**") , Date.received))
+complaints_cleaned = complaints[1:5000,]
+```
+
+以上这个新的数据框可以用来做描述性统计类的visualization（比如按类型计数的图、按时间计数的图之类），后面是文本内容的处理。
+
+```{r}
+write.table(complaints_cleaned,"E:/complaints_cleaned.csv",row.names=FALSE,col.names=TRUE,sep=",")
+```
+
+我把整理好的数据另存了一份，这样后面操作的时候可以直接读取这个CSV（原数据太大了读取要很久）。数据清理的过程不知道要不要体现在最后的成品中，所以暂时保留下来。
+
+```{r}
+library(tidyverse)
+library(ggplot2)
+complaints_cleaned = read.csv("E:/complaints_cleaned.csv", encoding = 'UTF-8')
+```
+
+```{r}
+library(tidytext)
+library(tm)
+library(SnowballC)
+library(qdap)
+#去大写、标点、特殊符号、停用词之类
+removeNumPunct <- function(x){gsub("[^[:alpha:][:space:]]*", "", x)}
+clean_corpus <- function(corpus){
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  corpus <- tm_map(corpus, content_transformer(replace_symbol))
+  corpus <- tm_map(corpus, removeWords, c(stopwords("en")))  
+  corpus <- tm_map(corpus, removeNumbers)
+  corpus <- tm_map(corpus, content_transformer(removeNumPunct))
+  corpus <- tm_map(corpus, stripWhitespace)
+  return(corpus)
+}
+
+```
+
+```{r}
+#将全部complaint文本合成一个bag of words，作为一个整体corpus
+complaints_text = sapply(complaints_cleaned$Consumer.complaint.narrative, function(row) iconv(row, 'latin1', 'ASCII', sub = ''))
+complaints_text2 = paste(unlist(complaints_text), collapse = ' ')
+
+complaints_corpus = VCorpus(VectorSource(complaints_text2))
+complaints_clean = clean_corpus(complaints_corpus)
+complaints_stemmed = tm_map(complaints_clean, stemDocument) #取词干
+```
+
+```{r}
+library(parallel)
+#词干补笔
+stemCompletion2 <- function(x, dictionary) {
+   x <- unlist(strsplit(as.character(x), " "))
+   x <- x[x != ""]
+   x <- stemCompletion(x, dictionary=dictionary)
+   x <- paste(x, sep="", collapse=" ")
+   PlainTextDocument(stripWhitespace(x))
+}
+
+complaints_comp = mclapply(complaints_stemmed, 
+                          stemCompletion2, 
+                          dictionary = complaints_clean)
+```
+
+```{r}
+complaints_comp_corpus = as.VCorpus(complaints_comp)
+complaints_dtm = DocumentTermMatrix(complaints_comp_corpus)
+complaints_dt = tidy(complaints_dtm)
+```
+
+以上Document Term Matrix可以用来做整体文本的词频分析（比如wordcloud，词频统计图之类）。
+
+```{r}
+#逐行进行文本清洗，用于进行后续情感分析之类
+complaints_cleaned$clean_text = as.character(complaints_cleaned$Consumer.complaint.narrative)
+complaints_cleaned$clean_text = tolower(complaints_cleaned$clean_text)
+complaints_cleaned$clean_text = removePunctuation(complaints_cleaned$clean_text)
+complaints_cleaned$clean_text = removeNumbers(complaints_cleaned$clean_text)
+complaints_cleaned$clean_text = stripWhitespace(complaints_cleaned$clean_text)
+complaints_cleaned$clean_text = removeWords(complaints_cleaned$clean_text, stopwords("en"))
+```
+
+关于情感分析，有一个叫NRC Word Emotion的词典可以将文本进行八个基本情绪以及正负向的打分。
+关于TF-IDF，我暂时没有像到好的办法将所有文本作为独立的document放入corpus中，所以整个corpus只有一个document因此TF-IDF暂时木有意义。如果大家有办法区分document的话就可以生成TF-IDF Matrix了。
