@@ -44,7 +44,7 @@ write.table(complaints_cleaned,"E:/complaints_cleaned.csv",row.names=FALSE,col.n
 ```{r}
 library(tidyverse)
 library(ggplot2)
-complaints_cleaned = read.csv("E:/complaints_cleaned.csv", encoding = 'UTF-8')
+complaints_cleaned = read.csv("complaints_cleaned.csv", encoding = 'UTF-8')
 ```
 
 ```{r}

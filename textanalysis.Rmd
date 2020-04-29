@@ -1,0 +1,145 @@
+---
+title: "Initial Data Analysis"
+author: Yunong Li
+date: 2020-04-29
+always_allow_html: yes
+output: 
+  html_document:
+    keep_md: true
+---
+
+```{r}
+# load libraries ----
+library(tidyverse)
+library(tm)
+library(quanteda)
+library(qdap)
+library(tidytext)
+library(SnowballC)
+library(wordcloud)
+library(plotrix)
+```
+
+```{r}
+# read data ----
+data <- read_csv("complaints_cleaned.csv")
+```
+
+```{r}
+colnames(data)
+```
+
+```{r}
+# create corpus ----
+complaints <- data %>% 
+  mutate(
+    doc_id = as.character(row_number()),
+    text = Consumer.complaint.narrative
+  ) %>% 
+  select(
+    doc_id, text
+  )
+
+complaints_corpus <- VCorpus(DataframeSource(complaints))
+```
+
+```{r}
+# clean corpus ----
+removeNumPunct <- function(x){gsub("[^[:alpha:][:space:]]*", "", x)}
+clean_corpus <- function(corpus){
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  corpus <- tm_map(corpus, content_transformer(replace_symbol))
+  corpus <- tm_map(corpus, removeWords, c(stopwords("en")))  
+  corpus <- tm_map(corpus, removeNumbers)
+  corpus <- tm_map(corpus, content_transformer(removeNumPunct))
+  corpus <- tm_map(corpus, stripWhitespace)
+  return(corpus)
+}
+
+complaints_clean <- clean_corpus(complaints_corpus)
+```
+
+
+```{r}
+# stem corpus and stem completion ----
+complaints_stem <- tm_map(complaints_clean, stemDocument)
+
+stemCompletion2 <- function(x, dictionary) {
+   x <- unlist(strsplit(as.character(x), " "))
+   x <- x[x != ""]
+   x <- stemCompletion(x, dictionary=dictionary)
+   x <- paste(x, sep="", collapse=" ")
+   PlainTextDocument(stripWhitespace(x))
+}
+
+complaints_compl <- lapply(complaints_stem, content_transformer(stemCompletion2), 
+                           dictionary = complaints_clean)
+```
+
+```{r}
+# create term-document matrix ----
+complaints_td <- tidy(TermDocumentMatrix(as.VCorpus(complaints_compl)))
+complaints_tf_idf <- complaints_td %>% 
+  bind_tf_idf(term, count) %>% 
+  arrange(desc(tf_idf))
+```
+
+```{r}
+# word cloud
+set.seed(7)
+wordcloud(complaints_tf_idf$term, complaints_tf_idf$tf, max.words = 50, colors = blues9 ,scale=c(2.5,0.1))
+```
+
+
+```{r}
+# sentiment analysis with NRC ----
+nrc <- get_sentiments("nrc")
+
+sentiment2 <- function(words){
+  require(quanteda)
+  tok = data.frame(word = quanteda::tokens(words)[[1]])
+  as.character(tok$word)
+  tok_sent = tok %>% 
+    inner_join(nrc, by = "word") %>% 
+    group_by(sentiment) %>% 
+    mutate(
+      count = n()
+    ) %>% 
+    arrange(desc(count)) %>% 
+    head(1) %>% 
+    select(sentiment)
+  
+  if(nrow(tok_sent) == 0){
+    tok_sent <- data.frame(sentiment = "None")
+  }
+  return(tok_sent)
+}
+```
+
+```{r}
+data$sentiment <- NA
+
+for (i in 1:nrow(data)) {
+  data$sentiment[i] = suppressWarnings(sentiment2(data$Consumer.complaint.narrative[i]))
+}
+```
+
+```{r}
+data$sentiment <- unlist(data$sentiment)
+```
+
+```{r}
+write_csv(data, "complaints_sentiment.csv")
+```
+
+```{r}
+data %>% 
+  filter(sentiment != "1") %>% 
+  group_by(sentiment) %>% 
+  ggplot(aes(x = sentiment)) +
+  geom_bar(fill="lightblue", colour="black", width = 0.5) +
+  labs(x = "Sentiments", y = "Count", title = "Sentiment Analysis") +
+  theme_bw()
+```
+
