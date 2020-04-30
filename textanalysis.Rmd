@@ -87,8 +87,10 @@ complaints_comp <- mclapply(complaints_stem,
 ```
 
 ```{r}
-save(complaints_comp, file = "complaints_comp_corpus.RData")
+save(complaints_comp, file = "complaints_comp_corpus.RData") # save for loading later
 ```
+
+
 
 ```{r}
 # create term-document matrix ----
@@ -120,7 +122,7 @@ complaints_cnt
 ```
 
 ```{r}
-set.seed(17)
+set.seed(8)
 wordcloud(complaints_cnt$term, complaints_cnt$count, max.words = 50, colors = blues9 ,scale=c(4,0.2))
 ```
 
@@ -166,7 +168,13 @@ data$sentiment <- unlist(data$sentiment)
 write_csv(data, "complaints_sentiment.csv")
 ```
 
+
+
+
+
 ```{r}
+data <- read_csv("complaints_sentiment.csv")
+
 data %>% 
   filter(sentiment != "1") %>% 
   group_by(sentiment) %>% 
