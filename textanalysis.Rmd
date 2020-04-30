@@ -94,7 +94,7 @@ save(complaints_comp, file = "complaints_comp_corpus.RData") # save for loading 
 
 ```{r}
 # create term-document matrix ----
-load("complaints_comp_corpus.RData")
+load("complaints_comp_corpus.RData") # load the corpus
 
 complaints_td <- tidy(TermDocumentMatrix(as.VCorpus(complaints_comp)))
 complaints_tf_idf <- complaints_td %>% 
