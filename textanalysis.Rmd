@@ -94,6 +94,8 @@ save(complaints_comp, file = "complaints_comp_corpus.RData") # save for loading 
 
 ```{r}
 # create term-document matrix ----
+load("complaints_comp_corpus.RData")
+
 complaints_td <- tidy(TermDocumentMatrix(as.VCorpus(complaints_comp)))
 complaints_tf_idf <- complaints_td %>% 
   filter(str_detect(term, "xxxx") == FALSE) %>% 
@@ -102,7 +104,7 @@ complaints_tf_idf <- complaints_td %>%
 ```
 
 ```{r}
-# word cloud
+# word cloud ----
 set.seed(7)
 wordcloud(complaints_tf_idf$term, complaints_tf_idf$tf, max.words = 50, colors = blues9 ,scale=c(2,0.1))
 ```
