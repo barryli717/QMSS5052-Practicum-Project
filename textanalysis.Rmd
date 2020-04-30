@@ -8,7 +8,7 @@ output:
     keep_md: true
 ---
 
-```{r}
+```{r, message=FALSE, warning=FALSE}
 # load libraries ----
 library(tidyverse)
 library(tm)
@@ -20,16 +20,16 @@ library(wordcloud)
 library(plotrix)
 ```
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 # read data ----
 data <- read_csv("complaints_cleaned.csv")
 ```
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 colnames(data)
 ```
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 # create corpus ----
 complaints <- data %>% 
   mutate(
@@ -43,7 +43,7 @@ complaints <- data %>%
 complaints_corpus <- VCorpus(DataframeSource(complaints))
 ```
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 # clean corpus ----
 removeNumPunct <- function(x){gsub("[^[:alpha:][:space:]]*", "", x)}
 clean_corpus <- function(corpus){
@@ -61,7 +61,7 @@ complaints_clean <- clean_corpus(complaints_corpus)
 ```
 
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 # stem corpus and stem completion ----
 complaints_stem <- tm_map(complaints_clean, stemDocument)
 
@@ -75,7 +75,7 @@ stemCompletion2 <- function(x, dictionary) {
 ```
 
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 library(parallel)
 
 no_cores <- detectCores() - 1
@@ -86,7 +86,7 @@ complaints_comp <- mclapply(complaints_stem,
                             mc.cores = no_cores)
 ```
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 save(complaints_comp, file = "complaints_comp_corpus.RData") # save for loading later
 ```
 
@@ -129,7 +129,7 @@ wordcloud(complaints_cnt$term, complaints_cnt$count, max.words = 50, colors = bl
 ```
 
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 # sentiment analysis with NRC ----
 nrc <- get_sentiments("nrc")
 
@@ -154,7 +154,7 @@ sentiment2 <- function(words){
 }
 ```
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 data$sentiment <- NA
 
 for (i in 1:nrow(data)) {
@@ -162,11 +162,11 @@ for (i in 1:nrow(data)) {
 }
 ```
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 data$sentiment <- unlist(data$sentiment)
 ```
 
-```{r}
+```{r, echo=FALSE, eval=FALSE}
 write_csv(data, "complaints_sentiment.csv")
 ```
 
@@ -174,7 +174,7 @@ write_csv(data, "complaints_sentiment.csv")
 
 
 
-```{r}
+```{r, message=FALSE}
 data <- read_csv("complaints_sentiment.csv")
 
 data %>% 
