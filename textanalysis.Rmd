@@ -33,7 +33,7 @@ colnames(data)
 # create corpus ----
 complaints <- data %>% 
   mutate(
-    doc_id = as.character(row_number()),
+    doc_id = paste("document", row_number(), sep = ""),
     text = Consumer.complaint.narrative
   ) %>% 
   select(
@@ -72,23 +72,56 @@ stemCompletion2 <- function(x, dictionary) {
    x <- paste(x, sep="", collapse=" ")
    PlainTextDocument(stripWhitespace(x))
 }
+```
 
-complaints_compl <- lapply(complaints_stem, content_transformer(stemCompletion2), 
-                           dictionary = complaints_clean)
+
+```{r}
+library(parallel)
+
+no_cores <- detectCores() - 1
+
+complaints_comp <- mclapply(complaints_stem, 
+                            content_transformer(stemCompletion2), 
+                            dictionary = complaints_clean, 
+                            mc.cores = no_cores)
+```
+
+```{r}
+save(complaints_comp, file = "complaints_comp_corpus.RData")
 ```
 
 ```{r}
 # create term-document matrix ----
-complaints_td <- tidy(TermDocumentMatrix(as.VCorpus(complaints_compl)))
+complaints_td <- tidy(TermDocumentMatrix(as.VCorpus(complaints_comp)))
 complaints_tf_idf <- complaints_td %>% 
-  bind_tf_idf(term, count) %>% 
+  filter(str_detect(term, "xxxx") == FALSE) %>% 
+  bind_tf_idf(term, document, count) %>% 
   arrange(desc(tf_idf))
 ```
 
 ```{r}
 # word cloud
 set.seed(7)
-wordcloud(complaints_tf_idf$term, complaints_tf_idf$tf, max.words = 50, colors = blues9 ,scale=c(2.5,0.1))
+wordcloud(complaints_tf_idf$term, complaints_tf_idf$tf, max.words = 50, colors = blues9 ,scale=c(2,0.1))
+```
+
+```{r}
+# frequency of words
+complaints_cnt <- complaints_tf_idf %>% 
+  group_by(term) %>% 
+  summarise(
+    count = sum(count)
+  ) %>% 
+  arrange(desc(count))
+```
+
+```{r}
+complaints_cnt
+```
+
+```{r}
+set.seed(17)
+wordcloud(complaints_cnt$term, complaints_cnt$count, max.words = 50, colors = blues9 ,scale=c(4,0.2))
 ```
 
 
@@ -138,7 +171,7 @@ data %>%
   filter(sentiment != "1") %>% 
   group_by(sentiment) %>% 
   ggplot(aes(x = sentiment)) +
-  geom_bar(fill="lightblue", colour="black", width = 0.5) +
+  geom_bar(width = 0.5) +
   labs(x = "Sentiments", y = "Count", title = "Sentiment Analysis") +
   theme_bw()
 ```
