@@ -1,0 +1,188 @@
+---
+title: "Initial Data Analysis"
+author: Yunong Li
+date: 2020-04-29
+always_allow_html: yes
+output: 
+  html_document:
+    keep_md: true
+---
+
+```{r, message=FALSE, warning=FALSE}
+# load libraries ----
+library(tidyverse)
+library(tm)
+library(quanteda)
+library(qdap)
+library(tidytext)
+library(SnowballC)
+library(wordcloud)
+library(plotrix)
+```
+
+```{r, echo=FALSE, eval=FALSE}
+# read data ----
+data <- read_csv("complaints_cleaned.csv")
+```
+
+```{r, echo=FALSE, eval=FALSE}
+colnames(data)
+```
+
+```{r, echo=FALSE, eval=FALSE}
+# create corpus ----
+complaints <- data %>% 
+  mutate(
+    doc_id = paste("document", row_number(), sep = ""),
+    text = Consumer.complaint.narrative
+  ) %>% 
+  select(
+    doc_id, text
+  )
+
+complaints_corpus <- VCorpus(DataframeSource(complaints))
+```
+
+```{r, echo=FALSE, eval=FALSE}
+# clean corpus ----
+removeNumPunct <- function(x){gsub("[^[:alpha:][:space:]]*", "", x)}
+clean_corpus <- function(corpus){
+  corpus <- tm_map(corpus, removePunctuation)
+  corpus <- tm_map(corpus, content_transformer(tolower))
+  corpus <- tm_map(corpus, content_transformer(replace_symbol))
+  corpus <- tm_map(corpus, removeWords, c(stopwords("en")))  
+  corpus <- tm_map(corpus, removeNumbers)
+  corpus <- tm_map(corpus, content_transformer(removeNumPunct))
+  corpus <- tm_map(corpus, stripWhitespace)
+  return(corpus)
+}
+
+complaints_clean <- clean_corpus(complaints_corpus)
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+# stem corpus and stem completion ----
+complaints_stem <- tm_map(complaints_clean, stemDocument)
+
+stemCompletion2 <- function(x, dictionary) {
+   x <- unlist(strsplit(as.character(x), " "))
+   x <- x[x != ""]
+   x <- stemCompletion(x, dictionary=dictionary)
+   x <- paste(x, sep="", collapse=" ")
+   PlainTextDocument(stripWhitespace(x))
+}
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+library(parallel)
+
+no_cores <- detectCores() - 1
+
+complaints_comp <- mclapply(complaints_stem, 
+                            content_transformer(stemCompletion2), 
+                            dictionary = complaints_clean, 
+                            mc.cores = no_cores)
+```
+
+```{r, echo=FALSE, eval=FALSE}
+save(complaints_comp, file = "complaints_comp_corpus.RData") # save for loading later
+```
+
+
+
+```{r}
+# create term-document matrix ----
+load("complaints_comp_corpus.RData") # load the corpus
+
+complaints_td <- tidy(TermDocumentMatrix(as.VCorpus(complaints_comp)))
+complaints_tf_idf <- complaints_td %>% 
+  filter(str_detect(term, "xxxx") == FALSE) %>% 
+  bind_tf_idf(term, document, count) %>% 
+  arrange(desc(tf_idf))
+```
+
+```{r}
+# word cloud ----
+set.seed(7)
+wordcloud(complaints_tf_idf$term, complaints_tf_idf$tf, max.words = 50, colors = blues9 ,scale=c(2,0.1))
+```
+
+```{r}
+# frequency of words
+complaints_cnt <- complaints_tf_idf %>% 
+  group_by(term) %>% 
+  summarise(
+    count = sum(count)
+  ) %>% 
+  arrange(desc(count))
+```
+
+```{r}
+complaints_cnt
+```
+
+```{r}
+set.seed(8)
+wordcloud(complaints_cnt$term, complaints_cnt$count, max.words = 50, colors = blues9 ,scale=c(4,0.2))
+```
+
+
+```{r, echo=FALSE, eval=FALSE}
+# sentiment analysis with NRC ----
+nrc <- get_sentiments("nrc")
+
+sentiment2 <- function(words){
+  require(quanteda)
+  tok = data.frame(word = quanteda::tokens(words)[[1]])
+  as.character(tok$word)
+  tok_sent = tok %>% 
+    inner_join(nrc, by = "word") %>% 
+    group_by(sentiment) %>% 
+    mutate(
+      count = n()
+    ) %>% 
+    arrange(desc(count)) %>% 
+    head(1) %>% 
+    select(sentiment)
+  
+  if(nrow(tok_sent) == 0){
+    tok_sent <- data.frame(sentiment = "None")
+  }
+  return(tok_sent)
+}
+```
+
+```{r, echo=FALSE, eval=FALSE}
+data$sentiment <- NA
+
+for (i in 1:nrow(data)) {
+  data$sentiment[i] = suppressWarnings(sentiment2(data$Consumer.complaint.narrative[i]))
+}
+```
+
+```{r, echo=FALSE, eval=FALSE}
+data$sentiment <- unlist(data$sentiment)
+```
+
+```{r, echo=FALSE, eval=FALSE}
+write_csv(data, "complaints_sentiment.csv")
+```
+
+
+
+
+
+```{r, message=FALSE}
+data <- read_csv("complaints_sentiment.csv")
+
+data %>% 
+  filter(sentiment != "1") %>% 
+  group_by(sentiment) %>% 
+  ggplot(aes(x = sentiment)) +
+  geom_bar(width = 0.5) +
+  labs(x = "Sentiments", y = "Count", title = "Sentiment Analysis") +
+  theme_bw()
+```
+
